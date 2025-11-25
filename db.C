@@ -468,21 +468,21 @@ DB::~DB()
 {
   // this could leave some open files open.
   // need to fix this by iterating through the hash table deleting each open file
-  for (int i = 0; i < HTSIZE; i++) {
-    fileHashBucket* tmpBuc = openFiles.ht[i];
+  // for (int i = 0; i < HTSIZE; i++) {
+  //   fileHashBucket* tmpBuc = openFiles.ht[i];
 
-    while (tmpBuc) {
-      tmpBuc = ht[i];
-      ht[i] = ht[i]->next;
+  //   while (tmpBuc) {
+  //     tmpBuc = ht[i];
+  //     ht[i] = ht[i]->next;
 
-      if (tmpBuc->file != NULL) {
-        tmpBuc->file->close();
-        delete tmpBuc->file;
-      }
+  //     if (tmpBuc->file != NULL) {
+  //       tmpBuc->file->close();
+  //       delete tmpBuc->file;
+  //     }
 
-      delete tmpBuc;
-    }
-  }
+  //     delete tmpBuc;
+  //   }
+  // }
 }
 
 
