@@ -17,19 +17,40 @@ const Status createHeapFile(const string fileName)
     {
 		// file doesn't exist. First create it and allocate
 		// an empty header page and data page.
+        
+		// Create the file
+		status = db.createFile(fileName);
+		if (status != OK) return status;
 		
+		// Open the newly created file
+		status = db.openFile(fileName, file);
+		if (status != OK) return status;
 		
+		// Allocate the header page
+		status = file->allocatePage(hdrPageNo);
+		if (status != OK) return status;
 		
+		// Allocate the first data page
+		status = file->allocatePage(newPageNo);
+		if (status != OK) return status;
 		
+		// Initialize the header page
+		hdrPage = new FileHdrPage();
+		strcpy(hdrPage->fileName, fileName.c_str());
+		hdrPage->firstPage = newPageNo;
+		hdrPage->recCnt = 0;
 		
+		// Write the header page
+		status = file->writePage(hdrPageNo, (Page*)hdrPage);
+		delete hdrPage;
+		if (status != OK) return status;
 		
-		
-		
-		
-		
-		
-		
-		
+		// Initialize and write the first data page
+		newPage = new Page();
+		memset(newPage, 0, sizeof(Page));
+		status = file->writePage(newPageNo, newPage);
+		delete newPage;
+		if (status != OK) return status;
     }
     return (FILEEXISTS);
 }
@@ -51,17 +72,36 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     // open the file and read in the header page and the first data page
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
+		// Read the header page (page 0) into the buffer pool
+		status = bufMgr->readPage(filePtr, 0, pagePtr);
+		if (status != OK)
+		{
+			returnStatus = status;
+			return;
+		}
 		
+		// Cast the page to a FileHdrPage pointer
+		headerPage = (FileHdrPage*)pagePtr;
+		headerPageNo = 0;
+		hdrDirtyFlag = false;
 		
+		// Read the first data page
+		status = bufMgr->readPage(filePtr, headerPage->firstPage, pagePtr);
+		if (status != OK)
+		{
+			returnStatus = status;
+			return;
+		}
 		
+		// Store the current page info
+		curPage = pagePtr;
+		curPageNo = headerPage->firstPage;
+		curDirtyFlag = false;
+		curRec.pageNo = curPageNo;
+		curRec.slotNo = 0;
+        curRec = NULLRID;
 		
-		
-		
-		
-		
-		
-		
-		
+		returnStatus = OK;
     }
     else
     {
