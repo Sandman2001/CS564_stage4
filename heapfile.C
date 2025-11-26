@@ -27,41 +27,40 @@ const Status createHeapFile(const string fileName)
         status = db.openFile(fileName, file);
         if (status != OK) return status;
 
-        // Allocate the header page through the buffer manager
-        Page* pagePtr = NULL;
-        status = bufMgr->allocPage(file, hdrPageNo, pagePtr);
+        // Allocate the header page using file interface to get page 0
+        status = file->allocatePage(hdrPageNo);
         if (status != OK) return status;
 
-        // Cast to FileHdrPage and initialize
-        hdrPage = (FileHdrPage*) pagePtr;
+        // Allocate the first data page
+        status = file->allocatePage(newPageNo);
+        if (status != OK) return status;
+
+        // Create and initialize header page in memory
+        hdrPage = new FileHdrPage();
         memset(hdrPage, 0, sizeof(FileHdrPage));
         strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE-1);
         hdrPage->fileName[MAXNAMESIZE-1] = '\0';
         hdrPage->recCnt = 0;
-
-        // Allocate the first data page
-        Page* dataPage = NULL;
-        status = bufMgr->allocPage(file, newPageNo, dataPage);
-        if (status != OK)
-        {
-            // unpin header before returning
-            bufMgr->unPinPage(file, hdrPageNo, false);
-            return status;
-        }
-
-        // Initialize the data page via its init() method
-        dataPage->init(newPageNo);
 
         // Set header pointers to first/last page and page count
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
         hdrPage->pageCnt = 2; // header + first data page
 
-        // mark both pages dirty and unpin them
-        status = bufMgr->unPinPage(file, newPageNo, true);
+        // Write the header page
+        status = file->writePage(hdrPageNo, (Page*)hdrPage);
+        delete hdrPage;
         if (status != OK) return status;
 
-        status = bufMgr->unPinPage(file, hdrPageNo, true);
+        // Create and initialize the first data page
+        newPage = new Page();
+        newPage->init(newPageNo);
+        status = file->writePage(newPageNo, newPage);
+        delete newPage;
+        if (status != OK) return status;
+
+        // Close the file
+        status = db.closeFile(file);
         if (status != OK) return status;
 
         return OK;
@@ -80,6 +79,11 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
 {
     Status 	status;
     Page*	pagePtr;
+    
+    // Initialize member variables
+    headerPage = NULL;
+    curPage = NULL;
+    filePtr = NULL;
 
     cout << "opening file " << fileName << endl;
 
@@ -103,6 +107,8 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
 		status = bufMgr->readPage(filePtr, headerPage->firstPage, pagePtr);
 		if (status != OK)
 		{
+			// Unpin header page before returning error
+			bufMgr->unPinPage(filePtr, headerPageNo, false);
 			returnStatus = status;
 			return;
 		}
@@ -532,6 +538,12 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
     // If no current page is pinned, pin the last page
     if (curPage == NULL)
     {
+        // Check if headerPage is valid
+        if (headerPage == NULL)
+        {
+            return BADFILE;
+        }
+        
         if (headerPage->lastPage == -1)
         {
             // No data pages exist, create first one
