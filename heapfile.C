@@ -15,46 +15,54 @@ const Status createHeapFile(const string fileName)
     status = db.openFile(fileName, file);
     if (status != OK)
     {
-		// file doesn't exist. First create it and allocate
-		// an empty header page and data page.
-        
-		// Create the file
-		status = db.createFile(fileName);
-		if (status != OK) return status;
-		
-		// Open the newly created file
-		status = db.openFile(fileName, file);
-		if (status != OK) return status;
-		
-		// Allocate the header page
-		status = file->allocatePage(hdrPageNo);
-		if (status != OK) return status;
-		
-		// Allocate the first data page
-		status = file->allocatePage(newPageNo);
-		if (status != OK) return status;
-		
-		// Initialize the header page
-		hdrPage = new FileHdrPage();
-		strcpy(hdrPage->fileName, fileName.c_str());
-		hdrPage->firstPage = newPageNo;
-		hdrPage->recCnt = 0;
-		
-		// Write the header page
-		status = file->writePage(hdrPageNo, (Page*)hdrPage);
-		delete hdrPage;
-		if (status != OK) return status;
-		
-		// Initialize and write the first data page
-		newPage = new Page();
-		newPage->init(newPageNo);
-		status = file->writePage(newPageNo, newPage);
-		delete newPage;
-		if (status != OK) return status;
-		
-		// Close the file
-		status = db.closeFile(file);
-		if (status != OK) return status;
+        // file doesn't exist. Create it and allocate
+        // an empty header page and a first data page using the
+        // buffer manager's allocPage interface.
+
+        // Create the file
+        status = db.createFile(fileName);
+        if (status != OK) return status;
+
+        // Open the newly created file
+        status = db.openFile(fileName, file);
+        if (status != OK) return status;
+
+        // Allocate the header page through the buffer manager
+        Page* pagePtr = NULL;
+        status = bufMgr->allocPage(file, hdrPageNo, pagePtr);
+        if (status != OK) return status;
+
+        // Cast to FileHdrPage and initialize
+        hdrPage = (FileHdrPage*) pagePtr;
+        memset(hdrPage, 0, sizeof(FileHdrPage));
+        strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE-1);
+        hdrPage->fileName[MAXNAMESIZE-1] = '\0';
+        hdrPage->recCnt = 0;
+
+        // Allocate the first data page
+        Page* dataPage = NULL;
+        status = bufMgr->allocPage(file, newPageNo, dataPage);
+        if (status != OK)
+        {
+            // unpin header before returning
+            bufMgr->unPinPage(file, hdrPageNo, false);
+            return status;
+        }
+
+        // Initialize the data page via its init() method
+        dataPage->init(newPageNo);
+
+        // Set header pointers to first/last page and page count
+        hdrPage->firstPage = newPageNo;
+        hdrPage->lastPage = newPageNo;
+        hdrPage->pageCnt = 2; // header + first data page
+
+        // mark both pages dirty and unpin them
+        status = bufMgr->unPinPage(file, newPageNo, true);
+        if (status != OK) return status;
+
+        status = bufMgr->unPinPage(file, hdrPageNo, true);
+        if (status != OK) return status;
 
         return OK;
     }
