@@ -50,7 +50,7 @@ const Status createHeapFile(const string fileName)
         }
 
         // Initialize the data page via its init() method
-        dataPage->init();
+        dataPage->init(newPageNo);
 
         // Set header pointers to first/last page and page count
         hdrPage->firstPage = newPageNo;
