@@ -27,7 +27,7 @@ const Status createHeapFile(const string fileName)
         status = db.openFile(fileName, file);
         if (status != OK) return status;
 
-        // Allocate the header page using file interface to get page 0
+        // Allocate the header page
         status = file->allocatePage(hdrPageNo);
         if (status != OK) return status;
 
@@ -90,8 +90,17 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     // open the file and read in the header page and the first data page
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
-		// Read the header page (page 0) into the buffer pool
-		status = bufMgr->readPage(filePtr, 0, pagePtr);
+        // Get the first page number (header page)
+        int firstPageNo;
+        status = filePtr->getFirstPage(firstPageNo);
+        if (status != OK)
+        {
+            returnStatus = status;
+            return;
+        }
+        
+		// Read the header page into the buffer pool
+		status = bufMgr->readPage(filePtr, firstPageNo, pagePtr);
 		if (status != OK)
 		{
 			returnStatus = status;
@@ -100,7 +109,7 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
 		
 		// Cast the page to a FileHdrPage pointer
 		headerPage = (FileHdrPage*)pagePtr;
-		headerPageNo = 0;
+		headerPageNo = firstPageNo;
 		hdrDirtyFlag = false;
 		
 		// Read the first data page
